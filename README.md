@@ -5,9 +5,10 @@ Institute of Biotechnology, Vilnius University
 
 # Description
 
-   The COMER web server is a web server for protein analysis based on the 
-   sequence alignment and homology search methods COMER2 and COTHER. They 
-   exhibit sensitive, accurate, and fast homology searches.
+   [The COMER web server](https://bioinformatics.lt/comer) is a web 
+   server for protein analysis based on the sequence alignment and 
+   homology search methods COMER2 and COTHER. They exhibit sensitive, 
+   accurate, and fast homology searches.
 
    The backend module represents computation logic without a graphical 
    interface. It can work independently as stand-alone software and be 
@@ -41,13 +42,12 @@ Institute of Biotechnology, Vilnius University
 
    The input parameters to all these services are (i) a filename pattern for 
    two input files, one of which (.in) includes input data and the other 
-   (.options) is the options file (please find an example at 
-   [COMER web server](https://bioinformatics.lt/comer)), and (ii) the 
-   directory where the input files can be found. Input data is sequence, 
-   MSA, and/or profile queries for the first two services, while it is a
-   list of pairwise alignments for the last two services. Please run the 
-   services with the `-h` option to see a more detailed description of 
-   command-line options.
+   (.options) is the options file (please find an example `var/job.options`),
+   and (ii) the directory where the input files can be found. Input data is 
+   sequence, MSA, and/or profile queries for the first two services, while 
+   it is a list of pairwise alignments for the last two services. Please 
+   run the services with the `-h` option to see a more detailed 
+   description of command-line options.
 
 # License
 
