@@ -148,7 +148,7 @@ fi
 if [ -n "$fail" ]; then
   echo -e "$fail" >$errfile
   echo -e "ERROR: The server's backend issue: Invalid data.\n\n1" >>"${errorfile}"
-  SendEmail "${sendemail}" "${errfile}" "${fail}"
+  SendEmail "${sendemail}" "${errfile}" "${UPATH} ${ID}\n\n${fail}"
   exit 1
 fi
 
@@ -213,7 +213,7 @@ if [ -n "\${bfail}" ]; then
   if [[ ! -f "${errorfile}" || -z "\$(tail -n3 '${errorfile}'|grep -e '^1$')" ]]; then
       echo -e "ERROR: The server's backend issue: System error.\n\n1" >>${errorfile}
   fi
-  SendEmail "${sendemail}" "${errfile}" "\${bfail}"
+  SendEmail "${sendemail}" "${errfile}" "${UPATH} ${ID}\n\n\${bfail}"
   exit 1
 fi
 
@@ -227,7 +227,7 @@ if [ $? -ne 0 ]; then
   fail+="ERROR: $ID: System error: Failed to submit a job to a queue.\n"
   echo -e "$fail" >>${errfile}
   echo -e "ERROR: The server's backend issue: Job submission failed.\n\n1" >>${errorfile}
-  SendEmail "${sendemail}" "${errfile}" "${fail}"
+  SendEmail "${sendemail}" "${errfile}" "${UPATH} ${ID}\n\n${fail}"
   exit 1
 fi
 

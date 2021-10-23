@@ -44,6 +44,7 @@ sub new {
     $self->{PATHCPRODB_PDB} = '';
     $self->{PATHCPRODB_SCOP} = '';
     $self->{PATHCPRODB_PFAM} = '';
+    $self->{PATHCPRODB_SwissProt} = '';
     $self->{PATHCOTHERPRODB_PDB} = '';
 
     $self->{INSTALL_COMER} = '';
@@ -89,6 +90,7 @@ sub PathSeqDb_UniRefHHS { my $self = shift; if (@_) { $self->{PATHSEQDB_UNIREFHH
 sub PathComerDb_PDB { my $self = shift; if (@_) { $self->{PATHCPRODB_PDB} = shift } return $self->{PATHCPRODB_PDB}; }
 sub PathComerDb_SCOP { my $self = shift; if (@_) { $self->{PATHCPRODB_SCOP} = shift } return $self->{PATHCPRODB_SCOP}; }
 sub PathComerDb_PFAM { my $self = shift; if (@_) { $self->{PATHCPRODB_PFAM} = shift } return $self->{PATHCPRODB_PFAM}; }
+sub PathComerDb_SwissProt { my $self = shift; if (@_) { $self->{PATHCPRODB_SwissProt} = shift } return $self->{PATHCPRODB_SwissProt}; }
 sub PathCotherDb_PDB { my $self = shift; if (@_) { $self->{PATHCOTHERPRODB_PDB} = shift } return $self->{PATHCOTHERPRODB_PDB}; }
 
 sub InstallDir_COMER { my $self = shift; if (@_) { $self->{INSTALL_COMER} = shift } return $self->{INSTALL_COMER}; }

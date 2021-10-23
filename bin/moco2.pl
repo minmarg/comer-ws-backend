@@ -1042,6 +1042,7 @@ sub PrepareAlnDataForModPlus
         $seqn .= $_ unless /^\s*>/;
         if(eof(F) || /^\s*>(\S+)/) {
             if($tmpl && $seqn) {
+                $tmpl =~ s/\|/_/g;
                 push @templids, $tmpl;
                 push @records, ">$tmpl ;\n$seqn";
             }

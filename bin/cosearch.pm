@@ -13,7 +13,9 @@ use lib "$FindBin::Bin";
 use readcfg;
 use readopt;
 use File::Spec;
+use File::Copy;
 use File::Basename;
+use Scalar::Util qw(looks_like_number);
 use POSIX qw(strftime);
 
 ## =============================================================================
@@ -96,6 +98,7 @@ sub Initialize
     my  $class = ref($self) || die("ERROR: $mysubname: Should be called by object.");
     $self->Preinitialize();
     $self->CheckConfig();
+    $self->ValidateOptionsFile();
     $self->InitializeOptions();
 }
 
@@ -237,6 +240,11 @@ sub CheckConfig
     }
     unless(-d $self->{cfgvar}->PathComerDb_PFAM()) {
         $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_PFAM()."'\n",
+                "Some of the database directories not found.\n");## h-l error message
+        $self->MyExit(1);
+    }
+    unless(-d $self->{cfgvar}->PathComerDb_SwissProt()) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_SwissProt()."'\n",
                 "Some of the database directories not found.\n");## h-l error message
         $self->MyExit(1);
     }
@@ -410,6 +418,67 @@ sub CheckConfig
             "Incomplete software installed on the system.\n");## h-l error message
         $self->MyExit(1);
     }
+}
+
+## =============================================================================
+#$ helper function for validating values in the options file
+sub ValidateHelper
+{
+    my  $self = shift;
+    my  $optname = shift;
+    my  $optcurvalue = shift;
+    my  $optminvalue = shift;
+    my  $optmaxvalue = shift;
+    my  $optdefvalue = shift;
+    my  $mysubname = (caller(0))[3];
+    my  $class = ref($self) || die("ERROR: $mysubname: Should be called by object.");
+    my  $warn = '';
+    if(!looks_like_number($optcurvalue) || $optcurvalue < $optminvalue || $optcurvalue > $optmaxvalue) {
+        $warn = "\nWARNING: Disallowed values: Option $optname changed: $optcurvalue -> $optdefvalue\n";
+        $self->Warning($warn, $warn, 1);##no e-mail
+        $_ = "$optname = $optdefvalue\n";
+    }
+}
+## validate options file and modify illegal values
+##
+sub ValidateOptionsFile
+{
+    my  $self = shift;
+    my  $mysubname = (caller(0))[3];
+    my  $class = ref($self) || die("ERROR: $mysubname: Should be called by object.");
+    my ($contents, $warn, $value) = ('','',0);
+
+    return unless(open(F, $self->{OPTFILENAME}));
+    while(<F>) {
+        if(/\s*EVAL\s*=\s*(\S+)/) { $self->ValidateHelper("EVAL", $1, 0, 100, 10); }
+        elsif(/\s*NOHITS\s*=\s*(\S+)/) { $self->ValidateHelper("NOHITS", $1, 1, 2000, 700); }
+        elsif(/\s*NOALNS\s*=\s*(\S+)/) { $self->ValidateHelper("NOALNS", $1, 1, 2000, 700); }
+        elsif(/\s*ADJWGT\s*=\s*(\S+)/) { $self->ValidateHelper("ADJWGT", $1, 0.001, 0.999, 0.33); }
+        elsif(/\s*CVSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("CVSWGT", $1, 0, 0.999, 0.15); }
+        elsif(/\s*SSSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("SSSWGT", $1, 0, 0.999, 0.12); }
+        elsif(/\s*DDMSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("DDMSWGT", $1, 0, 0.999, 0.2); }
+        elsif(/\s*LCFILTEREACH\s*=\s*(\S+)/) { $self->ValidateHelper("LCFILTEREACH", $1, 0, 1, 1); }
+        elsif(/\s*MINPP\s*=\s*(\S+)/) { $self->ValidateHelper("MINPP", $1, 0, 0.999, 0.28); }
+        ##
+        elsif(/\s*(hhsuite_opt_niterations)\s*=\s*(\S+)/) { $self->ValidateHelper($1, $2, 1, 4, 2); }
+        elsif(/\s*(hhsuite_opt_evalue)\s*=\s*(\S+)/) { $self->ValidateHelper($1, $2, 0, 1, 0.001); }
+        elsif(/\s*(hmmer_opt_niterations)\s*=\s*(\S+)/) { $self->ValidateHelper($1, $2, 1, 4, 2); }
+        elsif(/\s*(hmmer_opt_evalue)\s*=\s*(\S+)/) { $self->ValidateHelper($1, $2, 0, 1, 0.001); }
+        $contents .= $_
+    }
+    close(F);
+
+    ## no error check
+    move($self->{OPTFILENAME},"$self->{OPTFILENAME}.org");
+
+    unless(open(F, ">", $self->{OPTFILENAME})) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: $mysubname: ".
+                "Failed to open job options file: '$self->{OPTFILENAME}'\n",
+                "Faled to open job options file.\n");## h-l error message
+        $self->MyExit(1);
+    }
+    print(F $contents);
+    close(F);
 }
 
 ## =============================================================================
@@ -704,8 +773,14 @@ sub VerifyOptionValues
                         if(-f $fullnameext) {
                             push @fullnamelist, $fullname;
                         } else {
-                            my $text = "WARNING: COMER profile database not found: $filename\n";
-                            $self->Warning($text, $text, 1);##no e-mail
+                            $fullname = File::Spec->catfile($self->{cfgvar}->PathComerDb_SwissProt(),${filename});
+                            $fullnameext = "${fullname}.$self->{DBEXT}";
+                            if(-f $fullnameext) {
+                                push @fullnamelist, $fullname;
+                            } else {
+                                my $text = "WARNING: COMER profile database not found: $filename\n";
+                                $self->Warning($text, $text, 1);##no e-mail
+                            }
                         }
                     }
                 }
