@@ -6,7 +6,7 @@ Institute of Biotechnology, Vilnius University
 # Description
 
    The COMER web server is a web server for protein analysis based on the 
-   sequence alignment and homology search methods COMER2 and COTHER that 
+   sequence alignment and homology search methods COMER2 and COTHER. They 
    exhibit sensitive, accurate, and fast homology searches.
 
    The backend module represents computation logic without a graphical 
