@@ -51,7 +51,7 @@ Institute of Biotechnology, Vilnius University
 
 # License
 
-   The COMER webserver backend module is licensed under GNU General Public 
+   The COMER web server backend module is licensed under GNU General Public 
    License version 3. Please find the LICENSE and COPYING files 
    included in the software package.
 
