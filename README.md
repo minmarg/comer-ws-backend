@@ -45,7 +45,7 @@ Institute of Biotechnology, Vilnius University
    [COMER web server](https://bioinformatics.lt/comer)), and (ii) the 
    directory where the input files can be found. Input data is sequence, 
    MSA, and/or profile queries for the first two services, while it is a
-   list of pairwise alignments fo the last two services. Please run the 
+   list of pairwise alignments for the last two services. Please run the 
    services with the `-h` option to see a more detailed description of 
    command-line options.
 
