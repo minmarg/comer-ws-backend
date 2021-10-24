@@ -23,23 +23,27 @@ Institute of Biotechnology, Vilnius University
 
   *  services/comersearch\_SRVC.sh
 
-    The service of GPU-accelerated homology searches based on profile-profile 
-    comparison using COMER2
+   &nbsp;&nbsp;&nbsp;&nbsp;
+   The service of GPU-accelerated homology searches based on profile-profile 
+   comparison using COMER2
 
   *  services/cothersearch\_SRVC.sh
 
-    The service of GPU-accelerated homology (and analogy) searches by threading
-    using COTHER
+   &nbsp;&nbsp;&nbsp;&nbsp;
+   The service of GPU-accelerated homology (and analogy) searches by threading
+   using COTHER
 
   *  services/comerMSA\_SRVC.sh
 
-    The service of building a multiple sequence alignment (MSA) based on 
-    (resulting accurate profile-profile) pairwise alignments
+   &nbsp;&nbsp;&nbsp;&nbsp;
+   The service of building a multiple sequence alignment (MSA) based on 
+   (resulting accurate profile-profile) pairwise alignments
 
   *  services/comer3D\_SRVC.sh
 
-    The service of generating 3D structural models using the structures of 
-    identified proteins as templates and produced alignments as restraints
+   &nbsp;&nbsp;&nbsp;&nbsp;
+   The service of generating 3D structural models using the structures of 
+   identified proteins as templates and produced alignments as restraints
 
    The input parameters to all these services are (i) a filename pattern for 
    two input files, one of which (.in) includes input data and the other 
