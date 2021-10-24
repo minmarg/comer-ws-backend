@@ -7,7 +7,8 @@ Institute of Biotechnology, Vilnius University
 
    [The COMER web server](https://bioinformatics.lt/comer) is a web 
    server for protein analysis based on the sequence alignment and 
-   homology search methods COMER2 and COTHER. They exhibit sensitive, 
+   homology search methods [COMER2](https://github.com/minmarg/comer2) and 
+   [COTHER](https://github.com/minmarg/cother). They exhibit sensitive, 
    accurate, and fast homology searches.
 
    The backend module represents computation logic without a graphical 
@@ -22,32 +23,32 @@ Institute of Biotechnology, Vilnius University
 
   *  services/comersearch\_SRVC.sh
 
-   The service of GPU-accelerated homology searches based on profile-profile 
-   comparison using COMER2
+    The service of GPU-accelerated homology searches based on profile-profile 
+    comparison using COMER2
 
   *  services/cothersearch\_SRVC.sh
 
-   The service of GPU-accelerated homology (and analogy) searches by threading
-   using COTHER
+    The service of GPU-accelerated homology (and analogy) searches by threading
+    using COTHER
 
   *  services/comerMSA\_SRVC.sh
 
-   The service of building a multiple sequence alignment (MSA) based on 
-   (resulting accurate profile-profile) pairwise alignments
+    The service of building a multiple sequence alignment (MSA) based on 
+    (resulting accurate profile-profile) pairwise alignments
 
   *  services/comer3D\_SRVC.sh
 
-   The service of generating 3D structural models using the structures of 
-   identified proteins as templates and produced alignments as restraints
+    The service of generating 3D structural models using the structures of 
+    identified proteins as templates and produced alignments as restraints
 
    The input parameters to all these services are (i) a filename pattern for 
    two input files, one of which (.in) includes input data and the other 
    (.options) is the options file (please find an example `var/job.options`),
    and (ii) the directory where the input files can be found. Input data is 
-   sequence, MSA, and/or profile queries for the first two services, while 
-   it is a list of pairwise alignments for the last two services. Please 
-   run the services with the `-h` option to see a more detailed 
-   description of command-line options.
+   sequence, MSA, and/or profile querie(s) separated by the line `//` for the 
+   first two services, while it is a list of pairwise alignments for the last 
+   two services. Please run the services with the `-h` option to see a more 
+   detailed description of command-line options.
 
 # License
 
