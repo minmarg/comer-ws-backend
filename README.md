@@ -21,27 +21,19 @@ Institute of Biotechnology, Vilnius University
 
    The backend module provides these services as starting points:
 
-  *  services/comersearch\_SRVC.sh
-
-   &nbsp;&nbsp;&nbsp;&nbsp;
+  *  services/comersearch\_SRVC.sh <br/>
    The service of GPU-accelerated homology searches based on profile-profile 
    comparison using COMER2
 
-  *  services/cothersearch\_SRVC.sh
-
-   &nbsp;&nbsp;&nbsp;&nbsp;
+  *  services/cothersearch\_SRVC.sh <br/>
    The service of GPU-accelerated homology (and analogy) searches by threading
    using COTHER
 
-  *  services/comerMSA\_SRVC.sh
-
-   &nbsp;&nbsp;&nbsp;&nbsp;
+  *  services/comerMSA\_SRVC.sh <br/>
    The service of building a multiple sequence alignment (MSA) based on 
    (resulting accurate profile-profile) pairwise alignments
 
-  *  services/comer3D\_SRVC.sh
-
-   &nbsp;&nbsp;&nbsp;&nbsp;
+  *  services/comer3D\_SRVC.sh <br/>
    The service of generating 3D structural models using the structures of 
    identified proteins as templates and produced alignments as restraints
 
