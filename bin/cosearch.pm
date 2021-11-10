@@ -60,6 +60,7 @@ sub new {
     $self->{ERRFILENAME} = '';
     $self->{NOPRO} = 0;
     $self->{NORUN} = 0;
+    $self->{USINGSSSCORING} = 1;##using SS scoring
 
     while( scalar(@_)) {
         $self->{uc( $_[0] )} = $_[1];
@@ -97,8 +98,8 @@ sub Initialize
     my  $mysubname = (caller(0))[3];
     my  $class = ref($self) || die("ERROR: $mysubname: Should be called by object.");
     $self->Preinitialize();
-    $self->CheckConfig();
     $self->ValidateOptionsFile();
+    $self->CheckConfig();
     $self->InitializeOptions();
 }
 
@@ -322,7 +323,7 @@ sub CheckConfig
 
     unless($self->{NOPRO} && $self->{NORUN}) {
         $self->{optionvalues}->{prog_comer_comer} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','comer');
-        $self->{optionvalues}->{prog_comer_makepro} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','makepro.sh');
+        $self->{optionvalues}->{prog_comer_makepro} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin',($self->{USINGSSSCORING})? 'makepro.sh': 'makepro');
         $self->{optionvalues}->{prog_comer_makecov} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','makecov');
         unless(-f $self->{optionvalues}->{prog_comer_comer}) {
             $self->Error("ERROR: $self->{MYPROGNAME}: COMER executable not found: '".$self->{optionvalues}->{prog_comer_comer}."'\n",
@@ -455,7 +456,10 @@ sub ValidateOptionsFile
         elsif(/\s*NOALNS\s*=\s*(\S+)/) { $self->ValidateHelper("NOALNS", $1, 1, 2000, 700); }
         elsif(/\s*ADJWGT\s*=\s*(\S+)/) { $self->ValidateHelper("ADJWGT", $1, 0.001, 0.999, 0.33); }
         elsif(/\s*CVSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("CVSWGT", $1, 0, 0.999, 0.15); }
-        elsif(/\s*SSSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("SSSWGT", $1, 0, 0.999, 0.12); }
+        elsif(/\s*SSSWGT\s*=\s*(\S+)/) { 
+            if($1=~/^0*\.?0+$/) { $self->{USINGSSSCORING} = 0; }
+            else { $self->ValidateHelper("SSSWGT", $1, 0, 0.999, 0.12); }
+        }
         elsif(/\s*DDMSWGT\s*=\s*(\S+)/) { $self->ValidateHelper("DDMSWGT", $1, 0, 0.999, 0.2); }
         elsif(/\s*LCFILTEREACH\s*=\s*(\S+)/) { $self->ValidateHelper("LCFILTEREACH", $1, 0, 1, 1); }
         elsif(/\s*MINPP\s*=\s*(\S+)/) { $self->ValidateHelper("MINPP", $1, 0, 0.999, 0.28); }
@@ -1939,10 +1943,15 @@ sub ProcessQuery_t
 
         $timePro = time();
 
-        $command = "$$roptionvalues_t{prog_comer_makepro} ".
+        if($self->{USINGSSSCORING}) {
+            $command = "$$roptionvalues_t{prog_comer_makepro} ".
                 "-v -i \"${msafile}\" -o \"${profile}\" -p \"$self->{OPTFILENAME}\" -P \"".
                 $self->{cfgvar}->InstallDir_PSIPRED()."\" -B \"".
                 $self->{cfgvar}->InstallDir_BLAST()."\" >>\"${logfile}\" 2>&1";
+        } else {
+            $command = "$$roptionvalues_t{prog_comer_makepro} ".
+                "-v -i \"${msafile}\" -o \"${profile}\" -p \"$self->{OPTFILENAME}\" >>\"${logfile}\" 2>&1";
+        }
 
         unless(-f $profile)
         {
@@ -1956,7 +1965,10 @@ sub ProcessQuery_t
 
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to construct profile No.${qrynum} by makepro for '${msafile}'\n";
-                $errhl = "Constructing a profile for query No.${qrynum} failed. Please check your input.\n";
+                $errhl = "Constructing a profile for query No.${qrynum} failed. Please check your input. ".
+                         "You might consider turning off secondary structure scoring (by setting \"Weight of SS scores\" to 0) or ".
+                         "low-complexity filtering (by unchecking the \"Invoke low-complexity filtering for each ".
+                           "sequence in alignment\" checkbox).\n";
                 return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
         }
