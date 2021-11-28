@@ -122,7 +122,7 @@ foreach my $tmpl(@tids) {
         print( STDERR "ERROR: Failed to obtain structure for: $tmpl\n");
         exit(1);
     }
-    if(($OUTDIR cmp $LOCPDBDIR) && (! -f $OUTDIR/$outfile)) {
+    if(($OUTDIR cmp $LOCPDBDIR) && (! -f "$OUTDIR/$outfile")) {
         unless( RunCommandV("mv $LOCPDBDIR/$outfile $OUTDIR/")) {
            print( STDERR "ERROR: Failed to mv $outfile to $OUTDIR\n");
             exit(1);
