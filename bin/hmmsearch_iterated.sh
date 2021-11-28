@@ -204,7 +204,7 @@ function MakeQueryAndInput()
 
             ##make an HMM; use --hand to instruct it to use reference annotation for match states!
             local lochmmname="${locnamepat}_${locext}_afa_sto.hmm"
-            cmd="${hmmbuild} --hand \"${lochmmname}\" \"${locstoname}\""
+            cmd="${hmmbuild} --amino --hand \"${lochmmname}\" \"${locstoname}\""
             echo -e "$(${datecmd}) ${cmd}\n"; eval "${cmd}"
             if [ $? -ne 0 ]; then echo -e "ERROR: MakeQueryAndInput: Command failed.\n" >&2; return 1; fi
 
@@ -306,7 +306,7 @@ for ((i=0; i<ROUNDS; i++)); do
     if [ $? -ne 0 ]; then echo -e "ERROR: Command failed.\n" >&2; exit 1; fi
 
     ## make an HMM; NOTE: use --hand to instruct it to use reference annotation for match states!
-    cmd="${hmmbuild} --hand \"${hmmfile}\" \"${stofile}\""
+    cmd="${hmmbuild} --amino --hand \"${hmmfile}\" \"${stofile}\""
     echo -e "$(${datecmd}) ${cmd}\n"; eval "${cmd}"
 
     if [ $? -ne 0 ]; then echo -e "ERROR: Command failed.\n" >&2; exit 1; fi

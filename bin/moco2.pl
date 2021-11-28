@@ -290,6 +290,11 @@ $hlerrmsg = "Parsing or distribution of the input failed.\n";
 
 ProgressMsg("Preparing input...\n");
 
+unless(PreprocessInputFile($INPFILENAME, \$errmsg, \$hlerrmsg)) {
+    Error($errmsg, $hlerrmsg);## err msg and h-l error message
+    MyExit(1);
+}
+
 unless(DistrInputToSubdirs($INPFILENAME,
         $MAXNSEQS_perprog, $MAXNSEQS_multim, $modelallpairs,
         $inpdirname, $inpbasename, \$nqueries, \%inputs, \$errmsg, \$hlerrmsg)) {
@@ -512,6 +517,50 @@ sub VerifyOptionValues
     }
 
     return $ret;
+}
+
+## -----------------------------------------------------------------------------
+## PreprocessInputFile: parse the input file and change the name of each query 
+## inline so that duplicate names are avoided (Modeller will crash if the 
+## sequence name and a template name are the same)
+##
+sub PreprocessInputFile
+{
+    my  $inpfilename = shift;##the input to be parsed for multiple individual inputs
+    my  $rerrmsg = shift;##ref to the error message string to be put in logs
+    my  $rhlerrmsg = shift;##ref to the h-l error message string
+
+    my  $mysubname = (caller(0))[3];
+    my  $inputsep = qr/^\/\//;
+    my  $suffix = '_to_model';
+    my ($filecontents, $nseq) = ('',0);
+    my  $ret = 1;
+
+    unless(open(F, $inpfilename)) {
+        $$rerrmsg = "ERROR: $MYPROGNAME: $mysubname: Failed to open the input file: '$inpfilename'\n";
+        $$rhlerrmsg = "Input file not found.\n";
+        return 0;
+    }
+    while(<F>) {
+        next if(!eof(F) && /^\s*$/);
+        $nseq = 0 if(/$inputsep/);
+        if(/^>(\S*)(.*)$/ && $nseq == 0) {
+            my ($id, $rem) = ($1, $2);
+            $id =~ s/[^0-9a-zA-Z\.\-\+\^~=_]/_/g;
+            $id .= $suffix unless $id =~ /$suffix$/;
+            $_ = ">$id$rem\n";
+        }
+        $nseq++ if /^>/;
+        $filecontents .= $_;
+    }
+    close(F);
+    unless(open(F, '>', $inpfilename)) {
+        $$rerrmsg = "ERROR: $MYPROGNAME: $mysubname: Failed to open the input file for writing: '$inpfilename'\n";
+        $$rhlerrmsg = "Preprocessing of the input file failed.\n";
+        return 0;
+    }
+    print(F $filecontents);
+    close(F);
 }
 
 ## -----------------------------------------------------------------------------

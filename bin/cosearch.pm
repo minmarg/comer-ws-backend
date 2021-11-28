@@ -51,6 +51,8 @@ sub new {
      $self->{CTHDBEXT}, $self->{OUTEXT}) = 
        ('qry','fa','afa','sto','a3m', 'pwfa','cov','pro','tpro','bin','tbin','json');
 
+    $self->{NEFFEXT} = 'neff';
+
     $self->{INPFILENAME} = '';
     $self->{OPTFILENAME} = '';
     $self->{STAFILENAME} = '';
@@ -311,6 +313,7 @@ sub CheckConfig
     $self->{optionvalues}->{prog_comer_comer} = '';
     $self->{optionvalues}->{prog_comer_makepro} = '';
     $self->{optionvalues}->{prog_comer_makecov} = '';
+    $self->{optionvalues}->{prog_comer_neff} = '';
 
     $self->{optionvalues}->{prog_cother_cother} = '';
     $self->{optionvalues}->{prog_cother_adddist} = '';
@@ -325,6 +328,7 @@ sub CheckConfig
         $self->{optionvalues}->{prog_comer_comer} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','comer');
         $self->{optionvalues}->{prog_comer_makepro} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin',($self->{USINGSSSCORING})? 'makepro.sh': 'makepro');
         $self->{optionvalues}->{prog_comer_makecov} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','makecov');
+        $self->{optionvalues}->{prog_comer_neff} = File::Spec->catfile($self->{cfgvar}->InstallDir_COMER(),'bin','neff');
         unless(-f $self->{optionvalues}->{prog_comer_comer}) {
             $self->Error("ERROR: $self->{MYPROGNAME}: COMER executable not found: '".$self->{optionvalues}->{prog_comer_comer}."'\n",
                 "Incomplete software installed on the system.\n");## h-l error message
@@ -337,6 +341,11 @@ sub CheckConfig
         }
         unless(-f $self->{optionvalues}->{prog_comer_makecov}) {
             $self->Error("ERROR: $self->{MYPROGNAME}: COMER executable not found: '".$self->{optionvalues}->{prog_comer_makecov}."'\n",
+                "Incomplete software installed on the system.\n");## h-l error message
+            $self->MyExit(1);
+        }
+        unless(-f $self->{optionvalues}->{prog_comer_neff}) {
+            $self->Error("ERROR: $self->{MYPROGNAME}: COMER executable not found: '".$self->{optionvalues}->{prog_comer_neff}."'\n",
                 "Incomplete software installed on the system.\n");## h-l error message
             $self->MyExit(1);
         }
@@ -978,16 +987,19 @@ sub DistrInputToSubdirs
             } elsif($ext && $ext eq $self->{TPROEXT}) {##COTHER profile
                 $$rinfmsg = 'profile COTHER format' unless $lastext;
             } elsif($ext && $ext eq $self->{A3MEXT}) {##A3M profile
+                $qrycontents =~ s/^\s*>\s*\n/>Query_${$rnqueries} (unnamed)\n/;##added to avoid empty ids
                 $$rinfmsg = 'MSA A3M format' unless $lastext;
             } elsif($ndescs < 1) {##assume a plain sequence: make FASTA
                 $qrycontents = ">Query_${$rnqueries} (unnamed)\n".$qrycontents;
                 $ext = $self->{FASEXT};
                 $$rinfmsg = 'sequence FASTA/plain format' unless $lastext;
             } elsif($ndescs == 1) {##sequence in FASTA
+                $qrycontents =~ s/^\s*>\s*\n/>Query_${$rnqueries} (unnamed)\n/;##added to avoid empty ids
                 $ext = $self->{FASEXT};
                 $$rinfmsg = 'sequence FASTA format' unless $lastext;
             } else {##MSA in FASTA
                 $ext = $self->{AFAEXT};
+                $qrycontents =~ s/^\s*>\s*\n/>Query_${$rnqueries} (unnamed)\n/;##added to avoid empty ids
                 $$rinfmsg = 'MSA aligned FASTA format' unless $lastext;
             }
             $lastext = $ext unless $lastext;
@@ -1025,6 +1037,7 @@ sub DistrInputToSubdirs
             $$rinputs{"${$rnqueries}_logfl"} = "${qrybasename}.log";
             $$rinputs{"${$rnqueries}_msafl"} = '';
             $$rinputs{"${$rnqueries}_profl"} = '';
+            $$rinputs{"${$rnqueries}_nefffl"} = '';##neff file
             $$rinputs{"${$rnqueries}_tprof"} = '';##COTHER profile when it is in use
             $$rinputs{"${$rnqueries}_outfl"} = '';
             $$rinputs{"${$rnqueries}_hhsrun"} = 0;##hhsuite has not been run
@@ -1056,6 +1069,33 @@ sub DistrInputToSubdirs
 }
 
 ## -----------------------------------------------------------------------------
+## CheckForErrorsandWarnings: check for error codes and any messages that could 
+## have been returned from threads
+##
+sub CheckForErrorsandWarnings
+{
+    my  $self = shift;
+    my  $nqueries = shift;##number of queries
+    my  $rinputs = shift;##ref to the hash of individual inputs
+
+    my  @qrynums = 0..$nqueries-1;
+
+    for(my $q = 0; $q <= $#qrynums; $q++) {
+        my $qnum = $qrynums[$q];
+        ##print errors issued by threads if any
+        if($$rinputs{"${qnum}_rcode"}) { ##don't send an e-mail
+            $self->Error($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);
+            next;
+        }
+        elsif($$rinputs{"${qnum}_errhl"}) {
+            ##no error, but messages can be present; print them
+            $self->Warning($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);##no e-mail
+        }
+    }
+
+}
+
+## -----------------------------------------------------------------------------
 ## RunCOMER: put all profiles together in one file and run COMER search
 ##
 sub RunCOMER
@@ -1084,7 +1124,7 @@ sub RunCOMER
         my $qnum = $qrynums[$q];
         ##print errors issued by threads if any
         if($$rinputs{"${qnum}_rcode"}) { ##don't send an e-mail
-            $self->Error($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);
+            ##$self->Error($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);
             next;
         }
         $command .= " \"".$$rinputs{"${qnum}_profl"}."\"";
@@ -1123,7 +1163,7 @@ sub RunCOMER
         unless($self->ExecCommand($command)) {
             do{ sleep(2); next} if $i < $ntrials;
             $$rerrmsg = "ERROR: $self->{MYPROGNAME}: $mysubname: Unable to conduct a COMER search.\n";
-            $$rhlerrmsg = "Unable to conduct a COMER search.\n";
+            $$rhlerrmsg = "Unable to conduct a COMER search. If you submitted profile(s) as query(-ies), please make sure they have correct format.\n";
             return 0;
         }
         last;
@@ -1193,7 +1233,7 @@ sub MakeResultsList
         return 0;
     }
 
-    print(F "# Search_results Profile MSA Query\n");
+    print(F "# Search_results Profile MSA Query neff_file logfile\n");
 
     for(my $q = 0; $q <= $#qrynums; $q++) {
         my $qnum = $qrynums[$q];
@@ -1206,12 +1246,16 @@ sub MakeResultsList
         my @files = ( $$rinputs{"${qnum}_outfl"},
                       $profile,
                       $$rinputs{"${qnum}_msafl"},
-                      $$rinputs{"${qnum}_input"}
+                      $$rinputs{"${qnum}_input"},
+                      $$rinputs{"${qnum}_nefffl"},
+                      $$rinputs{"${qnum}_logfl"}
         );
+
+        do{$_ = '' unless -f $_} foreach @files;
 
         $_ =~ s/^$self->{inpdirname}\/*(.+)$/$1/ foreach @files;
 
-        print(F "\"$files[0]\"\t\"$files[1]\"\t\"$files[2]\"\t\"$files[3]\"\n");
+        print(F "\"$files[0]\"\t\"$files[1]\"\t\"$files[2]\"\t\"$files[3]\"\t\"$files[4]\"\t\"$files[5]\"\n");
 
         push @$rfilelist, @files;
     }
@@ -1462,7 +1506,7 @@ sub RunCOTHER
         my $qnum = $qrynums[$q];
         ##print errors issued by threads if any
         if($$rinputs{"${qnum}_rcode"}) { ##don't send an e-mail
-            $self->Error($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);
+            ##$self->Error($$rinputs{"${qnum}_error"}, $$rinputs{"${qnum}_errhl"}, 1);
             next;
         }
         $command .= " \"".$$rinputs{"${qnum}_tprof"}."\"";
@@ -1501,7 +1545,7 @@ sub RunCOTHER
         unless($self->ExecCommand($command)) {
             do{ sleep(2); next} if $i < $ntrials;
             $$rerrmsg = "ERROR: $self->{MYPROGNAME}: $mysubname: Unable to conduct a COTHER search.\n";
-            $$rhlerrmsg = "Unable to conduct a COTHER search.\n";
+            $$rhlerrmsg = "Unable to conduct a COTHER search. If you submitted profile(s) as query(-ies), please make sure they have correct format.\n";
             return 0;
         }
         last;
@@ -1627,10 +1671,11 @@ sub RunThreadsAndWait
             $$rinputs{"${qnum}_errhl"} = $thretlst[3];##high-level msg
             $$rinputs{"${qnum}_msafl"} = $thretlst[4] if $thretlst[4];##MSA filename
             $$rinputs{"${qnum}_profl"} = $thretlst[5] if $thretlst[5];##profile filename
-            $tmMSA += ($$rinputs{"${qnum}_tmMSA"} = $thretlst[6]);##MSA building timespan
-            $tmPro += ($$rinputs{"${qnum}_tmPro"} = $thretlst[7]);##profile construction timespan
-            $$rinputs{"${qnum}_hhsrun"} = $thretlst[8] if $thretlst[8];##whether hhsuite has been run
-            $$rinputs{"${qnum}_hmmrun"} = $thretlst[9] if $thretlst[9];##whether hmmer has been run
+            $$rinputs{"${qnum}_nefffl"} = $thretlst[6] if $thretlst[6];##.neff filename
+            $tmMSA += ($$rinputs{"${qnum}_tmMSA"} = $thretlst[7]);##MSA building timespan
+            $tmPro += ($$rinputs{"${qnum}_tmPro"} = $thretlst[8]);##profile construction timespan
+            $$rinputs{"${qnum}_hhsrun"} = $thretlst[9] if $thretlst[9];##whether hhsuite has been run
+            $$rinputs{"${qnum}_hmmrun"} = $thretlst[10] if $thretlst[10];##whether hmmer has been run
 
             ##next if $$rinputs{"${qnum}_rcode"};
             do{$nvalidqries--; next} if $$rinputs{"${qnum}_rcode"};
@@ -1684,6 +1729,7 @@ sub ProcessQuery_hhsuite_t
     ## error strings, output MSA and profile filenames, time for building the MSA, 
     ##   time for profile construction, and flags of hhsuite and hmmer having run:
     my ($error,$errhl,$msafile,$profile,$timeMSA,$timePro,$hhsrun,$hmmrun) = ('','','','',0,0,0,0);
+    my  $nefffile = '';
 
     my  $combine = $$roptionvalues_t{$$roptionkeys_t{hhsuite_in_use}} &&
                    $$roptionvalues_t{$$roptionkeys_t{hmmer_in_use}};
@@ -1719,7 +1765,7 @@ sub ProcessQuery_hhsuite_t
                 unless($self->ExecCommand($command)) {
                     $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to reformat MSA No.${qrynum}: '${inputfile}'\n";
                     $errhl = "Reformatting the MSA (query No.${qrynum}) failed. Please check your input.\n";
-                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
                 }
             }
 
@@ -1740,7 +1786,7 @@ sub ProcessQuery_hhsuite_t
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to make MSA No.${qrynum} by hhsuite for '${inputfile}'\n";
                 $errhl = "Building an MSA by searching for query No.${qrynum} failed. Please check your input.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
             }
             $hhsrun = 1;
         }
@@ -1749,7 +1795,7 @@ sub ProcessQuery_hhsuite_t
         $timeMSA = time()-$timeMSA;
     }
 
-    return ($qrynum, $rcode, $error, $errhl, $msafile, $profile, $timeMSA, $timePro, $hhsrun, $hmmrun);
+    return ($qrynum, $rcode, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, $timePro, $hhsrun, $hmmrun);
 }
 
 ## -----------------------------------------------------------------------------
@@ -1775,6 +1821,7 @@ sub ProcessQuery_t
     ## error strings, output MSA and profile filenames, time for building the MSA, 
     ##   time for profile construction, and flags of hhsuite and hmmer having run:
     my ($error,$errhl,$msafile,$profile,$timeMSA,$timePro,$hhsrun,$hmmrun) = ('','','','',0,0,0,0);
+    my  $nefffile = '';
 
     my  $search = $$roptionvalues_t{$$roptionkeys_t{hhsuite_in_use}} ||
                   $$roptionvalues_t{$$roptionkeys_t{hmmer_in_use}};
@@ -1820,7 +1867,7 @@ sub ProcessQuery_t
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to reformat MSA No.${qrynum}: '${inputfile}'\n";
                 $errhl = "Reformatting the MSA (query No.${qrynum}) failed. Please check your input.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
             }
         }
 
@@ -1847,7 +1894,7 @@ sub ProcessQuery_t
                 unless($self->ExecCommand($command)) {
                     $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to make MSA No.${qrynum} by hhsuite for '${inputfile}'\n";
                     $errhl = "Building an MSA by searching for query No.${qrynum} failed. Please check your input.\n";
-                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
                 }
                 $hhsrun = 1;
             }
@@ -1873,7 +1920,7 @@ sub ProcessQuery_t
                 unless($self->ExecCommand($command)) {
                     $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to make MSA No.${qrynum} by HMMER for '${inputfile}'\n";
                     $errhl = "Building an MSA by searching for query No.${qrynum} failed. Please check your input.\n";
-                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                    return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
                 }
                 $hmmrun = 1;
             }
@@ -1906,7 +1953,7 @@ sub ProcessQuery_t
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to combine MSAs for query No.${qrynum}: '${inputfile}'\n";
                 $errhl = "Combining MSAs obtained for query No.${qrynum} failed.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
             }
 
             ##no matter which $resqryfile (by hhs or hmmer)
@@ -1919,7 +1966,7 @@ sub ProcessQuery_t
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to convert combined MSAs for query No.${qrynum}: '${inputfile}'\n";
                 $errhl = "Combining MSAs obtained for query No.${qrynum} failed.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, time()-$timeMSA, $timePro, $hhsrun, $hmmrun);
             }
         }
 
@@ -1932,12 +1979,25 @@ sub ProcessQuery_t
         unless($self->ChangeProfileFileField($inputfile, $profile, basename($inputfile))) {
             $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to preprocess profile No.${qrynum}: '${inputfile}'\n";
             $errhl = "Profile preprocessing for query No.${qrynum} failed. Please check your input.\n";
-            return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, $timePro, $hhsrun, $hmmrun);
+            return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, $timePro, $hhsrun, $hmmrun);
         }
     }
     elsif(!$nopro)
     {
         $msafile = $search? $resafafile: $rfminputfile;
+
+        $nefffile = "$msafile.".$self->{NEFFEXT};
+
+        unless(-f $nefffile)
+        {
+            $command = "$$roptionvalues_t{prog_comer_neff} -v -i \"${msafile}\" >\"${nefffile}\" 2>>\"${logfile}\"";
+            if(open(F,'>>',$logfile)){print(F GetTime()."${preamb} ${command}\n\n");close(F);}
+            unless($self->ExecCommand($command)) {
+                $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to calculate Neff for query No.${qrynum} MSA '${msafile}'\n";
+                $errhl = "WARNING: Calculating Neff for query No.${qrynum} failed.\n";
+                $nefffile = '';
+            }
+        }
 
         $profile = $resprofile;
 
@@ -1958,7 +2018,7 @@ sub ProcessQuery_t
             unless(-f $msafile) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb MSA file for profile construction not found '${msafile}'\n";
                 $errhl = "An MSA file for profile construction not found.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
 
             if(open(F,'>>',$logfile)){print(F GetTime()."${preamb} ${command}\n\n");close(F);}
@@ -1969,7 +2029,7 @@ sub ProcessQuery_t
                          "You might consider turning off secondary structure scoring (by setting \"Weight of SS scores\" to 0) or ".
                          "low-complexity filtering (by unchecking the \"Invoke low-complexity filtering for each ".
                            "sequence in alignment\" checkbox).\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
         }
 
@@ -1980,7 +2040,7 @@ sub ProcessQuery_t
             if($self->{MAXSEQLENCOTHER} < $prolen) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Query No.${qrynum} length exceeds max allowed ($self->{MAXSEQLENCOTHER}).\n";
                 $errhl = "Length of query No.${qrynum} exceeds max allowed: $prolen > $self->{MAXSEQLENCOTHER}. Please check your input.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
 
             $command = "$$roptionvalues_t{prog_comer_makecov} ".
@@ -1994,14 +2054,14 @@ sub ProcessQuery_t
             unless($self->ExecCommand($command)) {
                 $error = "ERROR: $self->{MYPROGNAME}: $preamb Failed to make xcov file No.${qrynum} by makecov for '${msafile}'\n";
                 $errhl = "Constructing an xcov file for query No.${qrynum} failed. Please check your input.\n";
-                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
         }
 
         $timePro = time()-$timePro;
     }
 
-    return ($qrynum, $rcode, $error, $errhl, $msafile, $profile, $timeMSA, $timePro, $hhsrun, $hmmrun);
+    return ($qrynum, $rcode, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, $timePro, $hhsrun, $hmmrun);
 }
 
 ## General =====================================================================

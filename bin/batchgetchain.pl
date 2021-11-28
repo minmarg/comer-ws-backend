@@ -1,11 +1,14 @@
 #!/usr/bin/perl -w
 
 ##
-## (C)2019-2020 Mindaugas Margelevicius
+## (C)2021 Mindaugas Margelevicius
 ## Institute of Biotechnology, Vilnius University
 ##
 
 use strict;
+use Config;
+use threads;
+use threads::shared;
 use FindBin;
 use lib "$FindBin::Bin";
 use File::Spec;
@@ -14,6 +17,8 @@ use Getopt::Long;
 
 my  $MYPROGNAME = basename($0);
 my  $LOCPDBDIR = glob("/data/databases/pdb");
+my  $nCPUs = 1;
+my  $maxncpus = 0;
 
 my  $usage = <<EOIN;
 
@@ -35,6 +40,9 @@ Parameters:
 --pdb <directory>  Local directory of pdb structure files.
            default=$LOCPDBDIR
 
+-c <#cpus>         Number of CPUs to use for parallelizing the process.
+           Default=$nCPUs
+
 -h                 This text.
 
 EOIN
@@ -47,7 +55,8 @@ my  $Fail = 0;
 my  $result = GetOptions(
                'i=s'      => \$INLIST,
                'o=s'      => \$OUTDIR,
-               'pdb=s'      => \$LOCPDBDIR,
+               'pdb=s'    => \$LOCPDBDIR,
+               'c=i'      => \$nCPUs,
                'help|h'   => sub { print $usage; exit( 0 ); }
 );
 
@@ -55,6 +64,14 @@ do { print $usage; $Fail = 1; }  unless $result;
 do { print STDERR "ERROR: Input missing.\n$usage"; $Fail = 1; } unless($Fail || $INLIST);
 do { print STDERR "ERROR: Directory missing.\n$usage"; $Fail = 1; } unless($Fail || $LOCPDBDIR);
 do { print STDERR "ERROR: Directory of structure files not found: $LOCPDBDIR\n"; $Fail = 1; } unless($Fail || -d $LOCPDBDIR);
+do { print STDERR "ERROR: Invalid number of CPUs.\n$usage"; $Fail = 1; } unless($Fail || $nCPUs >= 1);
+
+if(GetNCPUs(\$maxncpus)) {
+    if($maxncpus < $nCPUs) {
+        print("ERROR: Specified #CPUs > #CPUs on system: $nCPUs > $maxncpus.\n");
+        $Fail = 1;
+    }
+}
 
 ##switch to python3
 #scl enable rh-python36 bash
@@ -95,17 +112,17 @@ unless( -d $OUTDIR || mkdir($OUTDIR)) {
     exit(1);
 }
 
-my  $command;
 my  @tids;
 
 if(-f $INLIST) {
     ##the list given as a filename
-    unless( open(I, $INLIST)) {
+    unless(open(I, $INLIST)) {
         print( STDERR "ERROR: Failed to open input file: $INLIST\n");
         exit(1);
     }
     while(<I>) {
         next if /^\s*#/;
+        next if /^\s*$/;
         my @a = split(/\s+/);
         push @tids, $a[0];
     }
@@ -115,31 +132,97 @@ if(-f $INLIST) {
     @tids = split(',',$INLIST);
 }
 
-foreach my $tmpl(@tids) {
-    my $outfile;
-    next if -f "$OUTDIR/$tmpl";
-    unless( GetStructure($UNZIP, $GETCHAIN, $LOCPDBDIR, \%FTPPDBDIR, $tmpl, \$outfile)) {
-        print( STDERR "ERROR: Failed to obtain structure for: $tmpl\n");
+
+
+if($Config{useithreads}) {
+    unless(LaunchThreads()) {
+        print( STDERR "ERROR: Launching threads failed.\n");
         exit(1);
     }
-    if(($OUTDIR cmp $LOCPDBDIR) && (! -f $OUTDIR/$outfile)) {
-        unless( RunCommandV("mv $LOCPDBDIR/$outfile $OUTDIR/")) {
-           print( STDERR "ERROR: Failed to mv $outfile to $OUTDIR\n");
-            exit(1);
-        }
+} else {
+    $nCPUs = 1;
+    print(STDERR "WARNING: Perl compiled WITHOUT thread support: ".
+        "Using only one cpu: #cpus=$nCPUs\n");
+    unless(ProcessPartofTids(0)) {
+        print( STDERR "ERROR: Extracting chains failed.\n");
+        exit(1);
     }
-    print "Obtained: $outfile\n\n\n";
 }
 
-unless( chdir($curdir)) {
-    print( STDERR "ERROR: Failed to change directory to: $curdir\n");
-    exit(1);
-}
+
+
+##unless( chdir($curdir)) {
+##    print( STDERR "ERROR: Failed to change directory to: $curdir\n");
+##    exit(1);
+##}
 
 print("Finished.\n");
 exit(0);
 
 ## ===================================================================
+sub LaunchThreads
+{
+    my @workers;
+    my @joinable = ();
+    for(my $t = 0; $t <= $nCPUs; $t++) {
+        $workers[$t] = threads->create(
+                {'context' => 'list'},
+                \&ProcessPartofTids, 
+                $t
+        );
+        unless($workers[$t]) {
+            print(STDERR "ERROR: Thread $t initialization failed.\n");
+        }
+    }
+    while(threads->list(threads::all)) {
+        @joinable = threads->list(threads::joinable);##...or use @workers
+        foreach my $thr(@joinable) {
+            my $thretcode = $thr->join();
+            unless($thretcode) {
+                printf(STDERR "ERROR: Thread %d returned the fail code.\n", $thr->tid());
+                next;
+            }
+            printf(STDERR "\nI: Thread %d joined.\n", $thr->tid());
+       }
+    }
+    return 1;
+}
+
+## ===================================================================
+## Entry point for threads: process part of given PDB chains
+##
+sub ProcessPartofTids
+{
+    my $mythid = shift;
+    for(my $i = $mythid; $i <= $#tids; $i += $nCPUs) {
+        my $tmpl = $tids[$i];
+        my $outfile;
+        next if -f "$OUTDIR/$tmpl";
+        unless( GetStructure($UNZIP, $GETCHAIN, $LOCPDBDIR, $OUTDIR, \%FTPPDBDIR, $tmpl, \$outfile)) {
+            print( STDERR "ERROR: Failed to obtain structure for: $tmpl\n");
+            next;##return(0);
+        }
+        ##if($OUTDIR cmp $LOCPDBDIR) {
+        ##    unless( RunCommandV("mv $LOCPDBDIR/$outfile $OUTDIR/")) {
+        ##       print( STDERR "ERROR: Failed to mv $outfile to $OUTDIR\n");
+        ##       return(0);
+        ##    }
+        ##}
+        print "Obtained: $outfile\n\n\n";
+    }
+    return(1);
+}
+
+## -------------------------------------------------------------------
+sub GetNCPUs
+{
+    my $rncpus = shift;##ref to #cpus
+    return 0 unless(open(F, "/proc/cpuinfo"));
+    $$rncpus = scalar(map /^processor/, <F>); 
+    close(F);
+    return 1;
+}
+
 ## -------------------------------------------------------------------
 ## Get the template name for output files
 ##
@@ -160,6 +243,7 @@ sub GetStructure
     my $unzipprog = shift;
     my $getchainprog = shift;
     my $lpdbdir = shift;##local directory of pdb structures
+    my $outdir = shift;##output directory for chains
     my $rrmtdirs = shift;##ref to remote directories of structures (hash)
     my $ltmplname = shift;##template name
     my $rtmplstrfilename = shift;##ref to the filename of template structure (to return)
@@ -169,20 +253,20 @@ sub GetStructure
     my $chre = qr/_([\da-zA-Z\.]+)$/;
     my $fail;
 
-    unless( chdir($lpdbdir)) {
-        print( STDERR "ERROR: Failed to change directory to: $lpdbdir\n");
-        return(0);
-    }
+    ##unless( chdir($lpdbdir)) {
+    ##    print( STDERR "ERROR: Failed to change directory to: $lpdbdir\n");
+    ##    return(0);
+    ##}
 
     $ltmplstruct =~ s/$chre//;
     $ltmplchain = $1 if $ltmplname =~ /$chre/;
     $$rtmplstrfilename = GetOutputTemplateName($ltmplname).".ent";
 
-    if( -f $$rtmplstrfilename ) {
-        unless( chdir($lcurdir)) {
-            print( STDERR "ERROR: Failed to change directory to: $lcurdir\n");
-            return(0);
-        }
+    if(-f File::Spec->catfile($outdir, $$rtmplstrfilename)) {
+        ##unless( chdir($lcurdir)) {
+        ##    print( STDERR "ERROR: Failed to change directory to: $lcurdir\n");
+        ##    return(0);
+        ##}
         return 1;
     }
 
@@ -190,18 +274,19 @@ sub GetStructure
     $ciffilename = lc(${ltmplstruct}).".cif";
     $pdbfilename = "pdb".lc(${ltmplstruct}).".ent";
 
-    unless( -f $ciffilename || -f $pdbfilename) {
+    unless( -f File::Spec->catfile($lpdbdir,$ciffilename) || 
+            -f File::Spec->catfile($lpdbdir,$pdbfilename)) {
         print("MSG: Downloading the structure for $ltmplname ...\n");
         ##first, try .cif file
         $fname = $ciffilename;
-        unless( RunCommandV("wget $$rrmtdirs{CIF}/$middle/${ciffilename}.gz")) {
+        unless( RunCommandV("wget -P $lpdbdir $$rrmtdirs{CIF}/$middle/${ciffilename}.gz")) {
             ##try obsolete .cif file
-            unless( RunCommandV("wget $$rrmtdirs{CIFOBS}/$middle/${ciffilename}.gz")) {
+            unless( RunCommandV("wget -P $lpdbdir $$rrmtdirs{CIFOBS}/$middle/${ciffilename}.gz")) {
                 ##then, .pdb file
                 $fname = $pdbfilename;
-                unless( RunCommandV("wget $$rrmtdirs{PDB}/$middle/${pdbfilename}.gz")) {
+                unless( RunCommandV("wget -P $lpdbdir $$rrmtdirs{PDB}/$middle/${pdbfilename}.gz")) {
                     ##obsolete .pdb file
-                    unless( RunCommandV("wget $$rrmtdirs{PDBOBS}/$middle/${pdbfilename}.gz")) {
+                    unless( RunCommandV("wget -P $lpdbdir $$rrmtdirs{PDBOBS}/$middle/${pdbfilename}.gz")) {
                         print( STDERR "ERROR: Failed to download the structure for: $ltmplname\n");
                         $fail = 1;
                     }
@@ -211,26 +296,28 @@ sub GetStructure
         print("\n") unless($fail);
     }
 
-    if( !$fail && $fname && (-f "${fname}.gz") && (! -f ${fname})) {
+    if( !$fail && $fname ) {
         print("MSG: Unzipping...\n");
-        $fail = 1 unless RunCommandV("$unzipprog ${fname}.gz");
+        $fail = 1 unless RunCommandV("$unzipprog ".File::Spec->catfile($lpdbdir,"${fname}.gz"));
         print("\n") unless($fail);
-        $fail = 0 if(-f ${fname});
     }
 
     unless( $fail ) {
-        $fname = (-f $ciffilename)? $ciffilename: $pdbfilename;
+        $fname = (-f File::Spec->catfile($lpdbdir,$ciffilename))? 
+                     File::Spec->catfile($lpdbdir,$ciffilename): 
+                     File::Spec->catfile($lpdbdir,$pdbfilename);
+        my $outfilename = File::Spec->catfile($outdir,$$rtmplstrfilename);
         print("MSG: Extracting chain of $fname ...\n");
-        my $cmd = "python3 $getchainprog -i $fname -o $$rtmplstrfilename";
+        my $cmd = "python3 $getchainprog -i $fname -o $outfilename";
         $cmd .= " -c $ltmplchain" if $ltmplchain !~ /\./;
         $fail =1 unless RunCommandV($cmd);
         print("\n") unless($fail);
     }
 
-    unless( chdir($lcurdir)) {
-        print( STDERR "ERROR: Failed to change directory to: $lcurdir\n");
-        return(0);
-    }
+    ##unless( chdir($lcurdir)) {
+    ##    print( STDERR "ERROR: Failed to change directory to: $lcurdir\n");
+    ##    return(0);
+    ##}
 
     return !$fail;
 }

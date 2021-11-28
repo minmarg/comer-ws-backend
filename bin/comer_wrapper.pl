@@ -156,6 +156,9 @@ unless($cos->RunThreadsAndWait(
     ##continue on...
 }
 
+##print errors and messages if any, returned from threads
+$cos->CheckForErrorsandWarnings($nqueries, \%inputs);
+
 unless($cos->{NORUN}) {
 
     $cos->ProgressMsg("Searching by profile-profile alignment using COMER...\n");
