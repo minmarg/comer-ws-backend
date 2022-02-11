@@ -30,6 +30,7 @@ sub new {
     $self->{LOCPDBDIR} = '';
     $self->{LOCSCOPeDIR} = '';
     $self->{WEBSCOPePDB} = '';
+    $self->{WEBAFPDB} = '';
     $self->{MODELLER} = '';
 
     $self->{JOB_NUM_CPUS} = 1;
@@ -77,6 +78,7 @@ sub new {
 sub Path3dDb_PDB { my $self = shift; if (@_) { $self->{LOCPDBDIR} = shift } return $self->{LOCPDBDIR}; }
 sub Path3dDb_SCOPe { my $self = shift; if (@_) { $self->{LOCSCOPeDIR} = shift } return $self->{LOCSCOPeDIR}; }
 sub WebAddr3dDb_SCOPe { my $self = shift; if (@_) { $self->{WEBSCOPePDB} = shift } return $self->{WEBSCOPePDB}; }
+sub WebAddr3dDb_AF { my $self = shift; if (@_) { $self->{WEBAFPDB} = shift } return $self->{WEBAFPDB}; }
 sub Executable_MODELLER { my $self = shift; if (@_) { $self->{MODELLER} = shift } return $self->{MODELLER}; }
 
 sub JobMaxNoQueries { my $self = shift; if (@_) { $self->{JOB_MAX_NQUERIES} = shift } return $self->{JOB_MAX_NQUERIES}; }

@@ -23,6 +23,7 @@ my  $MYPROGNAME = basename($0);
 my  $RENUMhelper = File::Spec->catfile($FindBin::Bin,"renumchain.py");
 my  $DWNPDBSTRhelper = File::Spec->catfile($FindBin::Bin,"dwnpdbchains.pl");
 my  $DWNSCPSTRhelper = File::Spec->catfile($FindBin::Bin,"dwnscopedomain.pl");
+my  $DWNPDBgenhelper = File::Spec->catfile($FindBin::Bin,"dwnpdbgeneric_AF.pl");
 my  $PWFA2MSAprog = File::Spec->catfile($FindBin::Bin,"pwfa2msa.pl");
 my  $SENDMAILprog = File::Spec->catfile($FindBin::Bin,"sendemail.pl");
 my  $CFGFILE = File::Spec->catfile($FindBin::Bin,File::Spec->updir(),"var","comer-ws-backend.conf");
@@ -167,6 +168,11 @@ unless(-f $DWNSCPSTRhelper) {
             "Some of the required program files not found.\n");## h-l error message
     MyExit(1);
 }
+unless(-f $DWNPDBgenhelper) {
+    Error("ERROR: $MYPROGNAME: Program file not found: '$DWNPDBgenhelper'\n",
+            "Some of the required program files not found.\n");## h-l error message
+    MyExit(1);
+}
 unless(-f $PWFA2MSAprog) {
     Error("ERROR: $MYPROGNAME: Program file not found: '$PWFA2MSAprog'\n",
             "Some of the required program files not found.\n");## h-l error message
@@ -215,6 +221,12 @@ unless($cfgvar->WebAddr3dDb_SCOPe()=~/^http/) {
     MyExit(1);
 }
 
+unless($cfgvar->WebAddr3dDb_AF()=~/^http/) {
+    Error("ERROR: $MYPROGNAME: Invalid web address for accessing AF entries: '".$cfgvar->WebAddr3dDb_AF()."'\n",
+            "Some of the web addresses specified incorrectly.\n");## h-l error message
+    MyExit(1);
+}
+
 
 unless(-f $cfgvar->Executable_MODELLER()) {
     Error("ERROR: $MYPROGNAME: Modeller executable not found: '".$cfgvar->Executable_MODELLER()."'\n",
@@ -233,6 +245,7 @@ unless(-d $cfgvar->InstallDir_MODPLUS()) {
 $optionvalues{pdbdb_dirname} = $cfgvar->Path3dDb_PDB();
 $optionvalues{scopedb_dirname} = $cfgvar->Path3dDb_SCOPe();
 $optionvalues{web_address_scope} = $cfgvar->WebAddr3dDb_SCOPe();
+$optionvalues{web_address_AF} = $cfgvar->WebAddr3dDb_AF();
 $optionvalues{prog_modeller_mod} = $cfgvar->Executable_MODELLER();
 $optionvalues{prog_modplus_modplus} = File::Spec->catfile($cfgvar->InstallDir_MODPLUS(),'modplus.pl');
 unless(-f $optionvalues{prog_modplus_modplus}) {
@@ -949,6 +962,7 @@ sub ProcessQuery_t
     my  $pdbdbdir = $$roptionvalues_t{pdbdb_dirname};
     my  $scopedbdir = $$roptionvalues_t{scopedb_dirname};
     my  $webaddrscope = $$roptionvalues_t{web_address_scope};
+    my  $webaddrAF = $$roptionvalues_t{web_address_AF};
     my  $modeller = $$roptionvalues_t{prog_modeller_mod};
     my  $modplus = $$roptionvalues_t{prog_modplus_modplus};
     my  $comerdb = $$roptionvalues_t{$$roptionkeys_t{comer_db}};
@@ -979,7 +993,7 @@ sub ProcessQuery_t
     }
 
     unless(PrepareAlnDataForModPlus($qrynum, $outputmsafile, $outputmsampfile, \$target, \$tmpls, $logfile, 
-            $templatelstfile, $templatesdir, $comerdb, $pdbdbdir, $scopedbdir, $webaddrscope, 
+            $templatelstfile, $templatesdir, $comerdb, $pdbdbdir, $scopedbdir, $webaddrscope, $webaddrAF,
             \$error, \$errhl, \$warng, \$wrnhl)) {
         return ($qrynum, 1, $error, $errhl, $warng, $wrnhl, $pirfile, $outfile, $tmpls, time()-$timePIR, $timeOut);
     }
@@ -1069,14 +1083,17 @@ sub PrepareAlnDataForModPlus
     my  $pdbdbdir = shift;##directory of pdb structures database
     my  $scopedbdir = shift;##directory of SCOPe structures database
     my  $webaddrscope = shift;##web address for downloading SCOPe domain structures
+    my  $webaddrAF = shift;##web address for downloading AF structural models
     my  $rerrmsg = shift;##ref to the error message string to be put in logs
     my  $rhlerrmsg = shift;##ref to the h-l error message string
     my  $rwrnmsg = shift;##ref to the warning message string to be put in logs
     my  $rhlwrnmsg = shift;##ref to the h-l warning message string
 
+    my  $afrec = qr/^sp_([^\s_]+)_/;
+
     my  $mysubname = (caller(0))[3];
     my  $preamb = "[ ${mysubname} ".threads->tid()." ] ";
-    my ($command, $cmdbase, $cmdbasepdb, $cmdbasescop, $dirname) = ('','','','','');
+    my ($command, $cmdbase, $cmdbasepdb, $cmdbasepdbAF, $cmdbasescop, $dirname) = ('','','','','','');
     my ($outcontents, $text) = ('','');
     my  $ret = 1;
 
@@ -1090,12 +1107,14 @@ sub PrepareAlnDataForModPlus
     while(<F>) {
         $seqn .= $_ unless /^\s*>/;
         if(eof(F) || /^\s*>(\S+)/) {
+            my $ttl = $1;
             if($tmpl && $seqn) {
                 $tmpl =~ s/\|/_/g;
+                $tmpl = "AF-$1-F1-model_v2" if $tmpl =~ /$afrec/;##change
                 push @templids, $tmpl;
                 push @records, ">$tmpl ;\n$seqn";
             }
-            $tmpl = $1;
+            $tmpl = $ttl;
             $seqn = '';
             next;
         }
@@ -1112,6 +1131,7 @@ sub PrepareAlnDataForModPlus
 
     $dirname = $pdbdbdir;
     $cmdbasepdb = "${DWNPDBSTRhelper} -o \"${templatesdir}\" --pdb \"${pdbdbdir}\" -i ";
+    $cmdbasepdbAF = "${DWNPDBgenhelper} -o \"${templatesdir}\" --pdb \"${pdbdbdir}\" --add \"${webaddrAF}\" --id  ";
 
     unless( -d $dirname || mkdir($dirname)) {
         $$rerrmsg = "ERROR: $MYPROGNAME: $mysubname: Failed to create a directory of structures: '$dirname' ".
@@ -1142,35 +1162,49 @@ sub PrepareAlnDataForModPlus
 
     ##start with template 1 as 0th is the target
     for(my $i = 1; $i <= $#templids; $i++) {
-        if($templids[$i] =~ /^[\da-zA-Z]{4}_[^\s_]+$/) {
+        my $dwnsfx = '';
+        my $afmodel = 0;
+        my $tmpext = $ENTEXT;
+        my $tmpid = $templids[$i];
+        if($tmpid =~ /^[\da-zA-Z]{4}_[^\s_]+$/) {
             $cmdbase = $cmdbasepdb;
-        } elsif($templids[$i] =~ /^[deg][\da-z]{4}[\da-zA-Z_\.][\da-zA-Z_]$/) {
+        } elsif($tmpid =~ /^[deg][\da-z]{4}[\da-zA-Z_\.][\da-zA-Z_]$/) {
             $cmdbase = $cmdbasescop;
+        } elsif($tmpid =~ /^AF-[\dA-Za-z]+-F1-model_v/) {
+            $afmodel = 1;
+            $tmpext = $PDBEXT;
+            $cmdbase = $cmdbasepdbAF;
+            $dwnsfx = ".${tmpext}";
         } else {
-            $text = "WARNING: ID $templids[$i] is not recognized to have a structure (model No.${qrynum}). ".
+            $text = "WARNING: ID $tmpid is not recognized to have a structure (model No.${qrynum}). ".
                 "Alignment skipped.\n";
             $$rwrnmsg .= $text;
             $$rhlwrnmsg .= $text;
             next;
         }
-        $command = "$cmdbase $templids[$i]  >>\"${logfilename}\" 2>&1";
+        $command = "$cmdbase ${tmpid}${dwnsfx}  >>\"${logfilename}\" 2>&1";
         if(open(F,'>>',$logfilename)){print(F GetTime()."${preamb} ${command}\n\n");close(F);}
         unless(ExecCommand($command)) {
-            $text = "WARNING: Failed to download template $templids[$i] for model No.${qrynum}. ".
-                "Alignment skipped.\n";
+            if($afmodel) {
+                $text = "WARNING: Template $tmpid for model No.${qrynum} not found. ".
+                    "Alignment skipped.\n";
+            } else {
+                $text = "WARNING: Failed to download template $tmpid for model No.${qrynum}. ".
+                    "Alignment skipped.\n";
+            }
             $$rwrnmsg .= $text;
             $$rhlwrnmsg .= $text;
             next;
         }
-        my $templatefile = File::Spec->catfile($templatesdir,$templids[$i].".${ENTEXT}");
+        my $templatefile = File::Spec->catfile($templatesdir,$tmpid.".${tmpext}");
         unless(ProcessStructureInline($templatefile, \$text)) {
             $$rerrmsg = "ERROR: $MYPROGNAME: $mysubname: $text (model No.${qrynum}).\n";
-            $$rhlerrmsg = "Processing of template $templids[$i] failed (model No.${qrynum}).\n";
+            $$rhlerrmsg = "Processing of template $tmpid failed (model No.${qrynum}).\n";
             return 0;
         }
         $outcontents .= $records[$i];
         $$rtemplateids .= ',' if $$rtemplateids;
-        $$rtemplateids .= $templids[$i];
+        $$rtemplateids .= $tmpid;
     }
 
     unless($outcontents) {
