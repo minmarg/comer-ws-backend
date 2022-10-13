@@ -23,6 +23,7 @@ my  $MYPROGNAME = basename($0);
 my  $RENUMhelper = File::Spec->catfile($FindBin::Bin,"renumchain.py");
 my  $DWNPDBSTRhelper = File::Spec->catfile($FindBin::Bin,"dwnpdbchains.pl");
 my  $DWNSCPSTRhelper = File::Spec->catfile($FindBin::Bin,"dwnscopedomain.pl");
+my  $DWNECODSTRhelper = File::Spec->catfile($FindBin::Bin,"dwnecoddomain.pl");
 my  $DWNPDBgenhelper = File::Spec->catfile($FindBin::Bin,"dwnpdbgeneric_AF.pl");
 my  $PWFA2MSAprog = File::Spec->catfile($FindBin::Bin,"pwfa2msa.pl");
 my  $SENDMAILprog = File::Spec->catfile($FindBin::Bin,"sendemail.pl");
@@ -168,6 +169,11 @@ unless(-f $DWNSCPSTRhelper) {
             "Some of the required program files not found.\n");## h-l error message
     MyExit(1);
 }
+unless(-f $DWNECODSTRhelper) {
+    Error("ERROR: $MYPROGNAME: Program file not found: '$DWNECODSTRhelper'\n",
+            "Some of the required program files not found.\n");## h-l error message
+    MyExit(1);
+}
 unless(-f $DWNPDBgenhelper) {
     Error("ERROR: $MYPROGNAME: Program file not found: '$DWNPDBgenhelper'\n",
             "Some of the required program files not found.\n");## h-l error message
@@ -214,9 +220,20 @@ unless(-d $cfgvar->Path3dDb_SCOPe()) {
             "Some of the database directories not found.\n");## h-l error message
     MyExit(1);
 }
+unless(-d $cfgvar->Path3dDb_ECOD()) {
+    Error("ERROR: $MYPROGNAME: Database directory not found: '".$cfgvar->Path3dDb_ECOD()."'\n",
+            "Some of the database directories not found.\n");## h-l error message
+    MyExit(1);
+}
 
 unless($cfgvar->WebAddr3dDb_SCOPe()=~/^http/) {
     Error("ERROR: $MYPROGNAME: Invalid web address for accessing SCOPe entries: '".$cfgvar->WebAddr3dDb_SCOPe()."'\n",
+            "Some of the web addresses specified incorrectly.\n");## h-l error message
+    MyExit(1);
+}
+
+unless($cfgvar->WebAddr3dDb_ECOD()=~/^http/) {
+    Error("ERROR: $MYPROGNAME: Invalid web address for accessing ECOD entries: '".$cfgvar->WebAddr3dDb_ECOD()."'\n",
             "Some of the web addresses specified incorrectly.\n");## h-l error message
     MyExit(1);
 }
@@ -244,7 +261,9 @@ unless(-d $cfgvar->InstallDir_MODPLUS()) {
 ##
 $optionvalues{pdbdb_dirname} = $cfgvar->Path3dDb_PDB();
 $optionvalues{scopedb_dirname} = $cfgvar->Path3dDb_SCOPe();
+$optionvalues{ecoddb_dirname} = $cfgvar->Path3dDb_ECOD();
 $optionvalues{web_address_scope} = $cfgvar->WebAddr3dDb_SCOPe();
+$optionvalues{web_address_ecod} = $cfgvar->WebAddr3dDb_ECOD();
 $optionvalues{web_address_AF} = $cfgvar->WebAddr3dDb_AF();
 $optionvalues{prog_modeller_mod} = $cfgvar->Executable_MODELLER();
 $optionvalues{prog_modplus_modplus} = File::Spec->catfile($cfgvar->InstallDir_MODPLUS(),'modplus.pl');
@@ -961,7 +980,9 @@ sub ProcessQuery_t
 
     my  $pdbdbdir = $$roptionvalues_t{pdbdb_dirname};
     my  $scopedbdir = $$roptionvalues_t{scopedb_dirname};
+    my  $ecoddbdir = $$roptionvalues_t{ecoddb_dirname};
     my  $webaddrscope = $$roptionvalues_t{web_address_scope};
+    my  $webaddrecod = $$roptionvalues_t{web_address_ecod};
     my  $webaddrAF = $$roptionvalues_t{web_address_AF};
     my  $modeller = $$roptionvalues_t{prog_modeller_mod};
     my  $modplus = $$roptionvalues_t{prog_modplus_modplus};
@@ -993,7 +1014,8 @@ sub ProcessQuery_t
     }
 
     unless(PrepareAlnDataForModPlus($qrynum, $outputmsafile, $outputmsampfile, \$target, \$tmpls, $logfile, 
-            $templatelstfile, $templatesdir, $comerdb, $pdbdbdir, $scopedbdir, $webaddrscope, $webaddrAF,
+            $templatelstfile, $templatesdir, $comerdb,
+            $pdbdbdir, $scopedbdir, $webaddrscope, $ecoddbdir, $webaddrecod, $webaddrAF,
             \$error, \$errhl, \$warng, \$wrnhl)) {
         return ($qrynum, 1, $error, $errhl, $warng, $wrnhl, $pirfile, $outfile, $tmpls, time()-$timePIR, $timeOut);
     }
@@ -1083,6 +1105,8 @@ sub PrepareAlnDataForModPlus
     my  $pdbdbdir = shift;##directory of pdb structures database
     my  $scopedbdir = shift;##directory of SCOPe structures database
     my  $webaddrscope = shift;##web address for downloading SCOPe domain structures
+    my  $ecoddbdir = shift;##directory of ECOD structures database
+    my  $webaddrecod = shift;##web address for downloading ECOD domain structures
     my  $webaddrAF = shift;##web address for downloading AF structural models
     my  $rerrmsg = shift;##ref to the error message string to be put in logs
     my  $rhlerrmsg = shift;##ref to the h-l error message string
@@ -1090,10 +1114,11 @@ sub PrepareAlnDataForModPlus
     my  $rhlwrnmsg = shift;##ref to the h-l warning message string
 
     my  $afrec = qr/^sp_([^\s_]+)_/;
+    my  $ecodrec = qr/^ECOD_\d+_([a-z][\da-z]{4}[\da-zA-Z_\.]+)$/;
 
     my  $mysubname = (caller(0))[3];
     my  $preamb = "[ ${mysubname} ".threads->tid()." ] ";
-    my ($command, $cmdbase, $cmdbasepdb, $cmdbasepdbAF, $cmdbasescop, $dirname) = ('','','','','','');
+    my ($command, $cmdbase, $cmdbasepdb, $cmdbasepdbAF, $cmdbasescop, $cmdbaseecod, $dirname) = ('','','','','','','');
     my ($outcontents, $text) = ('','');
     my  $ret = 1;
 
@@ -1102,16 +1127,17 @@ sub PrepareAlnDataForModPlus
         $$rhlerrmsg = "Consructed MSA file for model No.${qrynum} not found.\n";
         return 0;
     }
-    my ($tmpl, $seqn)=('','');
+    my ($tmplid, $tmpl, $seqn)=('','','');
     my (@templids, @records);##template ids
     while(<F>) {
         $seqn .= $_ unless /^\s*>/;
         if(eof(F) || /^\s*>(\S+)/) {
             my $ttl = $1;
             if($tmpl && $seqn) {
-                $tmpl =~ s/\|/_/g;
-                $tmpl = "AF-$1-F1-model_v2" if $tmpl =~ /$afrec/;##change
-                push @templids, $tmpl;
+                $tmpl =~ s/[\!\|]/_/g; $tmplid = $tmpl;
+                if($tmpl =~ /$afrec/) {$tmpl = "AF-$1-F1-model_v2"; $tmplid = $tmpl;}
+                elsif($tmpl =~ /$ecodrec/) {$tmpl = $1; $tmplid = "ECOD_${tmpl}";}
+                push @templids, $tmplid;
                 push @records, ">$tmpl ;\n$seqn";
             }
             $tmpl = $ttl;
@@ -1158,6 +1184,16 @@ sub PrepareAlnDataForModPlus
         return 0;
     }
 
+    $dirname = $ecoddbdir;
+    $cmdbaseecod = "${DWNECODSTRhelper} -o \"${templatesdir}\" --pdb \"${ecoddbdir}\" --add \"${webaddrecod}\" --id ";
+
+    unless( -d $dirname || mkdir($dirname)) {
+        $$rerrmsg = "ERROR: $MYPROGNAME: $mysubname: Failed to create a directory of structures: '$dirname' ".
+            "(model No.${qrynum}).\n";
+        $$rhlerrmsg = "Creating a directory failed (model No.${qrynum}).\n";
+        return 0;
+    }
+
     $$rtarget = $templids[0];
 
     ##start with template 1 as 0th is the target
@@ -1166,7 +1202,11 @@ sub PrepareAlnDataForModPlus
         my $afmodel = 0;
         my $tmpext = $ENTEXT;
         my $tmpid = $templids[$i];
-        if($tmpid =~ /^[\da-zA-Z]{4}_[^\s_]+$/) {
+        if($tmpid =~ /^ECOD_(\S+)$/) {
+            $tmpid = $1;
+            $tmpext = $PDBEXT;
+            $cmdbase = $cmdbaseecod;
+        } elsif($tmpid =~ /^[\da-zA-Z]{4}_[^\s_]+$/) {
             $cmdbase = $cmdbasepdb;
         } elsif($tmpid =~ /^[deg][\da-z]{4}[\da-zA-Z_\.][\da-zA-Z_]$/) {
             $cmdbase = $cmdbasescop;

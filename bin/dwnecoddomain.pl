@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 ##
-## (C)2019-2020 Mindaugas Margelevicius
+## (C)2019-2022 Mindaugas Margelevicius
 ## Institute of Biotechnology, Vilnius University
 ##
 
@@ -14,28 +14,26 @@ use Getopt::Long;
 
 my  $MYPROGNAME = basename($0);
 my  $LOCPDBDIR = glob("/data/databases/pdbstyle");
-my  $WEBADDR = 'https://scop.berkeley.edu/astral/pdbstyle/ver=2.07';
+my  $WEBADDR = 'http://prodata.swmed.edu/ecod/complete/structure?id=';
 
 my  $usage = <<EOIN;
 
-Download the pdb-style structure given by SCOPe ID and ensure the 
-consistency of its chain.
-(C)2019-2020 Mindaugas Margelevicius, Vilnius University
+Download pdb-style ECOD structures and their chain consistency.
+(C)2019-2022 Mindaugas Margelevicius, Vilnius University
 
 Usage:
 $MYPROGNAME <Parameters>
 
 Parameters:
 
---id <ID>          SCOPe domain ID (e.g., d2ctea1).
+--id <ID>          ECOD domain ID (e.g., e4g0rA1).
 
 -o <directory>     Output directory to locate the resulting file.
 
 --pdb <directory>  Local directory of pdb-style structure files.
            default=$LOCPDBDIR
 
---add <web-address> Web address to the page of SCOPe pdb-style 
-                   structures.
+--add <web-address> Web address to the page of pdb-style structures.
            default=$WEBADDR
 
 -h                 This text.
@@ -89,7 +87,7 @@ my  $command;
 my  @tids = ($ID);
 
 foreach my $tmpl(@tids) {
-    my $outfile = $tmpl.'.ent';
+    my $outfile = $tmpl.'.pdb';
     my $outfullfilename = File::Spec->catfile($OUTDIR, $outfile);
     next if -f $outfile;
     unless( GetStructure($LOCPDBDIR, $WEBADDR, $tmpl, $outfile, $outfullfilename)) {
@@ -104,8 +102,8 @@ exit(0);
 
 ## ===================================================================
 ## -------------------------------------------------------------------
-## download the structure of the given template from PDB if it is not 
-## present yet
+## download structure with the given filename from given site if 
+## it is not present yet
 ##
 sub GetStructure
 {
@@ -114,6 +112,7 @@ sub GetStructure
     my $ltmplname = shift;##template name
     my $ltmplfilename = shift;##filename of output template structure
     my $ltmplfullfilename = shift;##full filename of output template structure
+    my $ltmplfullfilenameorg = $ltmplfullfilename.'.org';##original full filename
     my $pdbfilename;
     my @pdbinfo;
     my $fail;
@@ -122,31 +121,41 @@ sub GetStructure
 
     $pdbfilename = File::Spec->catfile($lpdbdir, $ltmplfilename);
 
-    unless(-f $pdbfilename) {
-        print("MSG: Downloading the structure for $ltmplname ...\n");
+    unless(-f $ltmplfullfilenameorg) {
         $fail = 1;
-        foreach(0..4) {
-            ##try several times
-            if(RunCommandV("curl -d id=${ltmplname} -d output=\"plain text\" -d value=\"Retrieve\" ${rmtaddr} >${pdbfilename}")) {
+
+        if(-f $pdbfilename) {
+            if(RunCommandV("cp ${pdbfilename} ${ltmplfullfilenameorg}")) {
                 $fail = 0;
-                last;
+            } else {
+                print(STDERR "ERROR: Failed to copy: ${pdbfilename}\n");
             }
-            sleep(1);
         }
-        print(STDERR "ERROR: Failed to download the structure for: $ltmplname\n") if($fail);
-        print("\n") unless($fail);
+
+        if($fail) {
+            print("MSG: Downloading the structure $ltmplname ...\n");
+            foreach(0..1) {
+                ##try several times
+                if(RunCommandV("wget -O ${ltmplfullfilenameorg} ${rmtaddr}${ltmplname}")) {
+                    $fail = 0;
+                    last;
+                }
+                sleep(1);
+            }
+            print(STDERR "ERROR: Failed to download the structure: $ltmplname\n") if($fail);
+            print("\n") unless($fail);
+        }
     }
 
     return 0 if $fail;
 
-    sleep(2+int(rand(5)));
-
-    unless(ProcessStructure($ltmplname, $pdbfilename, $ltmplfullfilename)) {
-        unless( RunCommandV("mv ${pdbfilename} ${ltmplfullfilename}.corrupted")) {
-            print(STDERR "ERROR: Failed to move and rename: ${pdbfilename}\n");
+    unless(ProcessStructure($ltmplname, $ltmplfullfilenameorg, $ltmplfullfilename)) {
+        unless( RunCommandV("mv ${ltmplfullfilenameorg} ${ltmplfullfilename}.corrupted")) {
+            print(STDERR "ERROR: Failed to move and rename: ${ltmplfullfilenameorg}\n");
         }
         return 0;
     }
+
     return !$fail;
 }
 
@@ -171,7 +180,7 @@ sub ProcessStructure
             push @pdbinfo, $_;
             next;
         }
-        if(/^(?:ATOM|HETATM|TER)/) {
+        if(/^(?:ATOM|HETATM)/) {
             if(length($_) < 22) {
                 print(STDERR "ERROR: Invalid file format: line: $. file: $inputfile\n");
                 $fail = 1;
@@ -180,6 +189,10 @@ sub ProcessStructure
             substr($_,21,1) = ' ';#change chain ID to space
             push @pdbinfo, $_;
             next;
+        }
+        if(/^TER/) {
+            substr($_,21,1) = ' ' unless(length($_) < 22);
+            ##push @pdbinfo, $_;
         }
         if(/^ENDMDL/) {
             push @pdbinfo, $_;

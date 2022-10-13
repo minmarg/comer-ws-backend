@@ -44,6 +44,7 @@ sub new {
     $self->{MAXNQUERIES} = 100;##maximum number of queries allowed in the input
     $self->{MAXNQUERIESCOTHER} = 10;##maximum number of queries allowed in the input for COTHER
 
+    $self->{MAXSEQLENCOMER} = 9999;##maximum sequence length for COMER queries
     $self->{MAXSEQLENCOTHER} = 1000;##maximum sequence length COTHER queries are allowed of
 
     ($self->{QRYEXT}, $self->{FASEXT}, $self->{AFAEXT}, $self->{STOEXT}, $self->{A3MEXT}, 
@@ -230,6 +231,12 @@ sub CheckConfig
                 "Some of the database directories not found.\n");## h-l error message
         $self->MyExit(1);
     }
+    unless(-d $self->{cfgvar}->PathSeqDb_BFDHHS()) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathSeqDb_BFDHHS()."'\n",
+                "Some of the database directories not found.\n");## h-l error message
+        $self->MyExit(1);
+    }
+
 
     unless(-d $self->{cfgvar}->PathComerDb_PDB()) {
         $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_PDB()."'\n",
@@ -248,6 +255,22 @@ sub CheckConfig
     }
     unless(-d $self->{cfgvar}->PathComerDb_SwissProt()) {
         $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_SwissProt()."'\n",
+                "Some of the database directories not found.\n");## h-l error message
+        $self->MyExit(1);
+    }
+
+    unless(-d $self->{cfgvar}->PathComerDb_ECOD()) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_ECOD()."'\n",
+                "Some of the database directories not found.\n");## h-l error message
+        $self->MyExit(1);
+    }
+    unless(-d $self->{cfgvar}->PathComerDb_COG()) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_COG()."'\n",
+                "Some of the database directories not found.\n");## h-l error message
+        $self->MyExit(1);
+    }
+    unless(-d $self->{cfgvar}->PathComerDb_NCBICD()) {
+        $self->Error("ERROR: $self->{MYPROGNAME}: Database directory not found: '".$self->{cfgvar}->PathComerDb_NCBICD()."'\n",
                 "Some of the database directories not found.\n");## h-l error message
         $self->MyExit(1);
     }
@@ -769,33 +792,27 @@ sub VerifyOptionValues
             $filename = $self->{options}->GetValue($self->{optionkeys}->{comer_db});
             my @fnames = split(',', $filename);
             my @fullnamelist;
+            my @predetdbs = (
+                $self->{cfgvar}->PathComerDb_PDB(), $self->{cfgvar}->PathComerDb_SCOP(),
+                $self->{cfgvar}->PathComerDb_PFAM(), $self->{cfgvar}->PathComerDb_SwissProt(),
+                $self->{cfgvar}->PathComerDb_ECOD(), $self->{cfgvar}->PathComerDb_COG(),
+                $self->{cfgvar}->PathComerDb_NCBICD()
+            );
             foreach $filename(@fnames) {
-                $fullname = File::Spec->catfile($self->{cfgvar}->PathComerDb_PDB(),${filename});
-                $fullnameext = "${fullname}.$self->{DBEXT}";
+                $fullname = '';
 
-                if(-f $fullnameext) {
+                foreach my $path(@predetdbs) {
+                    my $tmpfname = File::Spec->catfile($path, $filename);
+                    $fullnameext = "${tmpfname}.$self->{DBEXT}";
+                    next unless -f $fullnameext;
+                    $fullname = $tmpfname;
                     push @fullnamelist, $fullname;
-                } else {
-                    $fullname = File::Spec->catfile($self->{cfgvar}->PathComerDb_SCOP(),${filename});
-                    $fullnameext = "${fullname}.$self->{DBEXT}";
-                    if(-f $fullnameext) {
-                        push @fullnamelist, $fullname;
-                    } else {
-                        $fullname = File::Spec->catfile($self->{cfgvar}->PathComerDb_PFAM(),${filename});
-                        $fullnameext = "${fullname}.$self->{DBEXT}";
-                        if(-f $fullnameext) {
-                            push @fullnamelist, $fullname;
-                        } else {
-                            $fullname = File::Spec->catfile($self->{cfgvar}->PathComerDb_SwissProt(),${filename});
-                            $fullnameext = "${fullname}.$self->{DBEXT}";
-                            if(-f $fullnameext) {
-                                push @fullnamelist, $fullname;
-                            } else {
-                                my $text = "WARNING: COMER profile database not found: $filename\n";
-                                $self->Warning($text, $text, 1);##no e-mail
-                            }
-                        }
-                    }
+                    last;
+                }
+
+                unless($fullname) {
+                    my $text = "WARNING: COMER profile database not found: $filename\n";
+                    $self->Warning($text, $text, 1);##no e-mail
                 }
             }
 
@@ -853,6 +870,11 @@ sub VerifyOptionValues
         
         if(scalar(glob("${fullname}*"))) {
             $self->{optionvalues}->{$self->{optionkeys}->{hhsuite_db}} = $fullname;
+        } else {
+            $fullname = File::Spec->catfile($self->{cfgvar}->PathSeqDb_BFDHHS(),$filename);
+            if(scalar(glob("${fullname}*"))) {
+                $self->{optionvalues}->{$self->{optionkeys}->{hhsuite_db}} = $fullname;
+            }
         }
         
         unless($self->{optionvalues}->{$self->{optionkeys}->{hhsuite_db}}) {
@@ -920,6 +942,76 @@ sub VerifyOptionValues
 }
 
 ## -----------------------------------------------------------------------------
+## ValidateQuery: validate a query by verifying sequence lengths in an
+## MSA or sequence format
+##
+sub ValidateQuery
+{
+    my  $self = shift;
+    my  $qnum = shift;
+    my  $ext = shift;##query format determinant
+    my  $rqrycontents = shift;##ref to query contents
+    my  $mysubname = (caller(0))[3];
+    my  $class = ref($self) || die("ERROR: $mysubname: Should be called by object.");
+    my  $maxseqlencomer = $self->{MAXSEQLENCOMER};
+    my  $maxseqlencother = $self->{MAXSEQLENCOTHER};
+    my  $maxseqlen = 1000;
+    $maxseqlen = $maxseqlencomer if $self->{METHOD} eq 'comer';
+    $maxseqlen = $maxseqlencother if $self->{METHOD} eq 'cother';
+    my  $maxalnlen = $maxseqlen * 1.5;
+    my ($c,$len) = (0,0);
+    my (@lines, %lengths);
+
+    if($ext && $ext eq $self->{PROEXT}) {##COMER profile
+    } elsif($ext && $ext eq $self->{TPROEXT}) {##COTHER profile
+    } elsif($ext && $ext eq $self->{STOEXT}) {##STOCKHOLM format
+        @lines = split(/\n+/, $$rqrycontents);
+        foreach(@lines) {
+            chomp;
+            if(/^\s*(\S+)\s+(\S+)\s*/) {
+                my $key = $1;
+                my $seq = $2; $seq =~ s/[\-\.]//g;
+                if(exists $lengths{$key}) {$lengths{$key} += length($seq);}
+                else {$lengths{$key} = length($seq);}
+                ;;
+                my $seqtoolong =  ($maxalnlen < $lengths{$key});
+                if($seqtoolong) {##condition violation
+                    my $hlerrmsg = "STOCKHOLM sequence(s) too long; Please check your input (query No.${qnum}).\n";
+                    my $errmsg = "ERROR: $self->{MYPROGNAME}: $mysubname: " . $hlerrmsg;
+                    $self->Error($errmsg, $hlerrmsg, 1);##no e-mail
+                    return 0;
+                }
+            }
+        }
+    } elsif($ext && ($ext eq $self->{A3MEXT} ||##A3M profile
+                     $ext eq $self->{FASEXT} ||##FASTA format
+                     $ext eq $self->{AFAEXT})){##Aligned FASTA format
+        @lines = split(/\n+/, $$rqrycontents);
+        foreach(@lines) {
+            chomp;
+            do {$c++; $len = 0; next;} if(/^\s*>/);
+            ;;
+            s/[\-\.]//g;
+            $len += length($_);
+            my $seqtoolong = (($c <= 1)? ($maxseqlen < $len): ($maxalnlen < $len));
+            if($seqtoolong) {##condition violation
+                my $hlerrmsg = "Sequence(s) too long; Please check your input (query No.${qnum}).\n";
+                my $errmsg = "ERROR: $self->{MYPROGNAME}: $mysubname: " . $hlerrmsg;
+                $self->Error($errmsg, $hlerrmsg, 1);##no e-mail
+                return 0;
+            }
+        }
+    } else {##Unknown
+        my $hlerrmsg = "Unrecognized format for query No.${qnum}.\n";
+        my $errmsg = "ERROR: $self->{MYPROGNAME}: $mysubname: " . $hlerrmsg;
+        $self->Error($errmsg, $hlerrmsg, 1);##no e-mail
+        return 0;
+    }
+
+    return 1;
+}
+
+## -----------------------------------------------------------------------------
 ## DistrInputToSubdirs: parse the input and distribute individual queries to 
 ## subdirectories;
 ##
@@ -946,6 +1038,7 @@ sub DistrInputToSubdirs
         return 0;
     }
     $$rnqueries = 0;
+    my $validnqrs = 0;
     while(<F>) {
         next if(!eof(F) && /^\s*$/);
         if(eof(F) || !/$inputsep/) {
@@ -1002,6 +1095,10 @@ sub DistrInputToSubdirs
                 $qrycontents =~ s/^\s*>\s*\n/>Query_${$rnqueries} (unnamed)\n/;##added to avoid empty ids
                 $$rinfmsg = 'MSA aligned FASTA format' unless $lastext;
             }
+            ;;
+            my $rcode = 0;
+            $rcode = 1 unless $self->ValidateQuery($$rnqueries, $ext, \$qrycontents);
+            ;;
             $lastext = $ext unless $lastext;
             $$rinfmsg = '  The queries in the input have different formats' if $lastext cmp $ext;
             $qrysubdir = File::Spec->catfile($self->{inpdirname},"$self->{inpbasename}__${$rnqueries}");
@@ -1028,7 +1125,7 @@ sub DistrInputToSubdirs
                 last;
             }
             close(FIN);
-            $$rinputs{"${$rnqueries}_rcode"} = 0;
+            $$rinputs{"${$rnqueries}_rcode"} = $rcode;
             $$rinputs{"${$rnqueries}_error"} = '';##error message
             $$rinputs{"${$rnqueries}_errhl"} = '';##high-level error message
             $$rinputs{"${$rnqueries}_isize"} = length($qrycontents);
@@ -1047,12 +1144,13 @@ sub DistrInputToSubdirs
             $seqn = $prevseqn = '';
             $ndescs = 0;
             $$rnqueries++;
+            $validnqrs++ unless $rcode;
             next;
         }
     }
     close(F);
 
-    if($$rnqueries < 1) {
+    if($validnqrs < 1) {
         $$rerrmsg = $$rhlerrmsg = '' if $ret;
         $$rerrmsg .= "ERROR: $self->{MYPROGNAME}: $mysubname: No queries found in the input.\n";
         $$rhlerrmsg .= "Invalid input format: No queries.\n";
@@ -2029,6 +2127,17 @@ sub ProcessQuery_t
                          "You might consider turning off secondary structure scoring (by setting \"Weight of SS scores\" to 0) or ".
                          "low-complexity filtering (by unchecking the \"Invoke low-complexity filtering for each ".
                            "sequence in alignment\" checkbox).\n";
+                return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
+            }
+        }
+
+        if( $self->{METHOD} eq 'comer') {
+            my $prolen = 0;
+            unless($self->GetProfileLength($profile, \$prolen)) {
+            }
+            if($self->{MAXSEQLENCOMER} < $prolen) {
+                $error = "ERROR: $self->{MYPROGNAME}: $preamb Query No.${qrynum} length exceeds max allowed ($self->{MAXSEQLENCOMER}).\n";
+                $errhl = "Length of query No.${qrynum} exceeds max allowed: $prolen > $self->{MAXSEQLENCOMER}. Please check your input.\n";
                 return ($qrynum, 1, $error, $errhl, $msafile, $profile, $nefffile, $timeMSA, time()-$timePro, $hhsrun, $hmmrun);
             }
         }

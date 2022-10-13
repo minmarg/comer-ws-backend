@@ -29,7 +29,9 @@ sub new {
 
     $self->{LOCPDBDIR} = '';
     $self->{LOCSCOPeDIR} = '';
+    $self->{LOCECODDIR} = '';
     $self->{WEBSCOPePDB} = '';
+    $self->{WEBECODPDB} = '';
     $self->{WEBAFPDB} = '';
     $self->{MODELLER} = '';
 
@@ -41,11 +43,15 @@ sub new {
 
     $self->{PATHSEQDB_UNIREF} = '';
     $self->{PATHSEQDB_UNIREFHHS} = '';
+    $self->{PATHSEQDB_BFDHHS} = '';
 
     $self->{PATHCPRODB_PDB} = '';
     $self->{PATHCPRODB_SCOP} = '';
     $self->{PATHCPRODB_PFAM} = '';
     $self->{PATHCPRODB_SwissProt} = '';
+    $self->{PATHCPRODB_ECOD} = '';
+    $self->{PATHCPRODB_COG} = '';
+    $self->{PATHCPRODB_NCBICD} = '';
     $self->{PATHCOTHERPRODB_PDB} = '';
 
     $self->{INSTALL_COMER} = '';
@@ -77,7 +83,9 @@ sub new {
 
 sub Path3dDb_PDB { my $self = shift; if (@_) { $self->{LOCPDBDIR} = shift } return $self->{LOCPDBDIR}; }
 sub Path3dDb_SCOPe { my $self = shift; if (@_) { $self->{LOCSCOPeDIR} = shift } return $self->{LOCSCOPeDIR}; }
+sub Path3dDb_ECOD { my $self = shift; if (@_) { $self->{LOCECODDIR} = shift } return $self->{LOCECODDIR}; }
 sub WebAddr3dDb_SCOPe { my $self = shift; if (@_) { $self->{WEBSCOPePDB} = shift } return $self->{WEBSCOPePDB}; }
+sub WebAddr3dDb_ECOD { my $self = shift; if (@_) { $self->{WEBECODPDB} = shift } return $self->{WEBECODPDB}; }
 sub WebAddr3dDb_AF { my $self = shift; if (@_) { $self->{WEBAFPDB} = shift } return $self->{WEBAFPDB}; }
 sub Executable_MODELLER { my $self = shift; if (@_) { $self->{MODELLER} = shift } return $self->{MODELLER}; }
 
@@ -88,11 +96,15 @@ sub JobMaxNo3DTemplates { my $self = shift; if (@_) { $self->{JOB_MAX_N3DTEMPLAT
 
 sub PathSeqDb_UniRef { my $self = shift; if (@_) { $self->{PATHSEQDB_UNIREF} = shift } return $self->{PATHSEQDB_UNIREF}; }
 sub PathSeqDb_UniRefHHS { my $self = shift; if (@_) { $self->{PATHSEQDB_UNIREFHHS} = shift } return $self->{PATHSEQDB_UNIREFHHS}; }
+sub PathSeqDb_BFDHHS { my $self = shift; if (@_) { $self->{PATHSEQDB_BFDHHS} = shift } return $self->{PATHSEQDB_BFDHHS}; }
 
 sub PathComerDb_PDB { my $self = shift; if (@_) { $self->{PATHCPRODB_PDB} = shift } return $self->{PATHCPRODB_PDB}; }
 sub PathComerDb_SCOP { my $self = shift; if (@_) { $self->{PATHCPRODB_SCOP} = shift } return $self->{PATHCPRODB_SCOP}; }
 sub PathComerDb_PFAM { my $self = shift; if (@_) { $self->{PATHCPRODB_PFAM} = shift } return $self->{PATHCPRODB_PFAM}; }
 sub PathComerDb_SwissProt { my $self = shift; if (@_) { $self->{PATHCPRODB_SwissProt} = shift } return $self->{PATHCPRODB_SwissProt}; }
+sub PathComerDb_ECOD { my $self = shift; if (@_) { $self->{PATHCPRODB_ECOD} = shift } return $self->{PATHCPRODB_ECOD}; }
+sub PathComerDb_COG { my $self = shift; if (@_) { $self->{PATHCPRODB_COG} = shift } return $self->{PATHCPRODB_COG}; }
+sub PathComerDb_NCBICD { my $self = shift; if (@_) { $self->{PATHCPRODB_NCBICD} = shift } return $self->{PATHCPRODB_NCBICD}; }
 sub PathCotherDb_PDB { my $self = shift; if (@_) { $self->{PATHCOTHERPRODB_PDB} = shift } return $self->{PATHCOTHERPRODB_PDB}; }
 
 sub InstallDir_COMER { my $self = shift; if (@_) { $self->{INSTALL_COMER} = shift } return $self->{INSTALL_COMER}; }

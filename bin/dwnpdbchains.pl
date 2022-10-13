@@ -123,8 +123,8 @@ foreach my $tmpl(@tids) {
         exit(1);
     }
     if(($OUTDIR cmp $LOCPDBDIR) && (! -f "$OUTDIR/$outfile")) {
-        unless( RunCommandV("mv $LOCPDBDIR/$outfile $OUTDIR/")) {
-           print( STDERR "ERROR: Failed to mv $outfile to $OUTDIR\n");
+        unless( RunCommandV("cp $LOCPDBDIR/$outfile $OUTDIR/")) {
+           print( STDERR "ERROR: Failed to cp $outfile to $OUTDIR\n");
             exit(1);
         }
     }
@@ -210,6 +210,8 @@ sub GetStructure
         }
         print("\n") unless($fail);
     }
+
+    sleep(2+int(rand(5))) if(!$fail);
 
     if( !$fail && $fname && (-f "${fname}.gz") && (! -f ${fname})) {
         print("MSG: Unzipping...\n");
