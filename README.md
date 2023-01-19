@@ -46,6 +46,12 @@ Institute of Biotechnology, Vilnius University
    two services. Please run the services with the `-h` option to see a more 
    detailed description of command-line options.
 
+# Citing the COMER web server
+
+Dapkunas, J., Margelevicius, M. (2023) The COMER web server for protein 
+analysis by homology. Bioinformatics 39(1), btac807 
+(https://doi.org/10.1093/bioinformatics/btac807).
+
 # License
 
    The COMER web server backend module is licensed under GNU General Public 
